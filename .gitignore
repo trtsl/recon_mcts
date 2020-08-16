@@ -1,0 +1,10 @@
+# The following combination of patterns adds all files
+# without an extension (i.e. no '.' in the file name)
+*
+!/**/
+!*.*
+
+# Ignore specific files
+Cargo.lock
+*.swp
+target/*

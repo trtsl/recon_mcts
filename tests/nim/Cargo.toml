@@ -1,0 +1,15 @@
+[package]
+name = "recon_mcts-test_nim"
+version = "0.1.0"
+authors = ["na <na>"]
+edition = "2018"
+
+[dependencies]
+rand = "0.7.3"
+
+[dependencies.recon_mcts]
+path = "../.."
+features = ["test_internals"]
+
+[lib]
+path = "lib.rs"

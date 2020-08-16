@@ -1,0 +1,30 @@
+[package]
+name = "recon_mcts"
+description = "A recombining, concurrent implementation of monte carlo tree search"
+version = "0.1.0"
+authors = ["trtsl@github.com"]
+edition = "2018"
+license = "MIT"
+readme = "README.md"
+
+[features]
+default = ["stable"]
+stable = []
+test_internals = []
+# nightly = []
+# two_player = []
+
+# Tests are in a separate workspace so they can be compiled with feature
+# `test_internals` by default.  Because the tests require a considerable amount
+# of setup code which also serves as good api demonstration, this set-up allows
+# the tests to have access to private functions (i.e. private when not compiled
+# with `test_internals`) but also be included in the `rustdoc` documentation.
+[workspace]
+members = [
+    ".",
+    "./tests/*",
+]
+default-members = [
+    ".",
+    "./tests/*",
+]

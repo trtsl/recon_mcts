@@ -4,8 +4,13 @@ use std::ops::Deref;
 use crate::ref_iter::RefIterator;
 
 /// A flag indicating whether an action is being evaluated for exploration or exploitation.
+#[derive(Debug)]
 pub enum SelectNodeState {
+    /// `Explore` indicates that the node has been selected in [`GameDynamics::select_node`] for
+    /// exploration purposes.
     Explore,
+    /// `Exploit` indicates that the node has been selected in [`GameDynamics::select_node`] for
+    /// exploitation purposes.
     Exploit,
 }
 
@@ -23,9 +28,9 @@ pub enum SelectNodeState {
 /// The associated types should generally not be types that allow interior mutability as mutating
 /// them in the methods provided by the `GameDynamics` trait may result in logic error.  However,
 /// in some implementations it may be desirable to use a
-/// [`GameDynamics::Score`](#associatedtype.Score) type with interior mutability, e.g. in order to
+/// [`GameDynamics::Score`] type with interior mutability, e.g. in order to
 /// modify the number of times it was selected in
-/// [`GameDynamics::select_node`](#tymethod.select_node).
+/// [`GameDynamics::select_node`].
 pub trait GameDynamics {
     /// Most likely an enum to designate which player is allowed to select an action at the current
     /// node.  For a one player game, this type can simply be the unit `()`.
@@ -56,8 +61,6 @@ pub trait GameDynamics {
     /// Convert an input state into the available actions / moves. Return `None` if the game is
     /// over.  If the game is over, the [`GameDynamics::score_leaf`] method
     /// will be called to evaluate the state
-    ///
-    /// [`GameDynamics::score_leaf`]: #tymethod.score_leaf
     fn available_actions(
         &self,
         player: &Self::Player,
@@ -75,8 +78,6 @@ pub trait GameDynamics {
     /// Note that the user must ensure that for any `State` the same state can never be reached
     /// again by applying any number of `Action`s obtained via `available_actions` (i.e. the user
     /// must ensure the tree graph is acyclic)
-    ///
-    /// [`GameDynamics::apply_action`]: #tymethod.apply_action
     fn apply_action(&self, state: Self::State, action: &Self::Action) -> Option<Self::State>;
 
     /// Select the action to take based on the scores.
@@ -95,8 +96,6 @@ pub trait GameDynamics {
     /// only a partial expansion of nodes is desired upon reaching a leaf node and recalculating
     /// the state is preferred over storing it in an enum. See additional info in
     /// [`GameDynamics::score_leaf`].
-    ///
-    /// [`GameDynamics::score_leaf`]: #tymethod.score_leaf
     // Instead of using a `Deref<Target = T>` we could probably just lock the interface into
     // providing `RwLockReadGuard<T>` so we wouldn't need a separate `DynGD` trait for dynamic
     // dispatch ... but that would be less fun
@@ -172,10 +171,6 @@ pub trait GameDynamics {
     /// scoring is performed by [`GameDynamics::score_leaf`] because it is used in checking whether
     /// the same state already exists in the tree (i.e. encountered via a different sequence of
     /// actions).
-    ///
-    /// [`GameDynamics::available_actions`]: #tymethod.available_actions
-    /// [`GameDynamics::select_node`]: #tymethod.select_node
-    /// [`GameDynamics::score_leaf`]: #tymethod.score_leaf
     fn score_leaf(
         &self,
         parent_score: Option<&Self::Score>,
@@ -190,24 +185,29 @@ pub trait GameDynamics {
 /// `DynGD` is a supertrait of `BaseGD`.
 ///
 /// For descriptions of the associated types and required methods see [`GameDynamics`].
-///
-/// [`DynGd`]: trait.DynGD.html
-/// [`GameDynamics`]: trait.GameDynamics.html
 pub trait BaseGD {
+    /// See [`GameDynamics::Player`] for a description of this associated type.
     type Player;
+    /// See [`GameDynamics::State`] for a description of this associated type.
     type State;
+    /// See [`GameDynamics::Action`] for a description of this associated type.
     type Action;
+    /// See [`GameDynamics::Score`] for a description of this associated type.
     type Score;
+    /// See [`GameDynamics::ActionIter`] for a description of this associated type.
     type ActionIter: IntoIterator<Item = (Self::Player, Self::Action)>;
 
+    /// See [`GameDynamics::available_actions`] for a description of this associated function.
     fn available_actions(
         &self,
         player: &Self::Player,
         state: &Self::State,
     ) -> Option<Self::ActionIter>;
 
+    /// See [`GameDynamics::apply_action`] for a description of this associated function.
     fn apply_action(&self, state: Self::State, action: &Self::Action) -> Option<Self::State>;
 
+    /// See [`GameDynamics::score_leaf`] for a description of this associated function.
     fn score_leaf(
         &self,
         parent_score: Option<&Self::Score>,
@@ -272,18 +272,15 @@ where
 ///
 /// Using `DynGD` for dynamic dispatch does not result in additional heap allocations.  This is
 /// accomplished via the use of a single `RefCell` on the stack which is referenced by all
-/// `Ref<T>`s returned by an `IntoIterator` type in the `DynGD` trait methods.  As a result,
-/// calling `Deref::deref` on a `Ref` that is not the `Ref` most recently returned by the
-/// iterator will result in a panic.  If out-of-sequence access is required, the implementation must
-/// store the dereferenced values rather than the `Ref`s.
+/// `Ref<T>`s returned by a `dyn Iterator` type in the `DynGD` trait methods.  As a result, calling
+/// `Deref::deref` on a `Ref` that is not the `Ref` most recently returned by the iterator will
+/// result in a panic.  If out-of-sequence access is required, the implementation must store the
+/// dereferenced values rather than the `Ref`s.
 ///
-/// [`BaseGD`]: trait.BaseGD.html
-/// [`GameDynamics`]: trait.GameDynamics.html
-/// [`GameDynamics::select_node`]: trait.GameDynamics.html#tymethod.select_node
-/// [`GameDynamics::backprop_scores`]: trait.GameDynamics.html#tymethod.backprop_scores
 /// [`GameDynamics` Implementors]: trait.GameDynamics.html#implementors
 #[allow(clippy::type_complexity)]
 pub trait DynGD: BaseGD {
+    /// See [`GameDynamics::select_node`] for a description of this associated function.
     fn select_node(
         &self,
         parent_score: Option<&Self::Score>,
@@ -295,6 +292,7 @@ pub trait DynGD: BaseGD {
         >,
     ) -> Self::Action;
 
+    /// See [`GameDynamics::backprop_scores`] for a description of this associated function.
     fn backprop_scores(
         &self,
         player: &Self::Player,

@@ -139,7 +139,7 @@ mod test {
         {
             let item = RefCell::new(None);
             let mut iter = iter_in.ref_iter(&item).map(|x| Ref::map(x, |x| x.deref()));
-            let iter: &mut (dyn Iterator<Item = Ref<T>>) = &mut iter;
+            let iter: &mut (dyn Iterator<Item = Ref<'_, T>>) = &mut iter;
         }
     }
 }

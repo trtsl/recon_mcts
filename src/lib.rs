@@ -150,15 +150,6 @@
 //! [![repo_badge]][repo_url]
 //! [![mit_badge]][mit_url]
 //!
-//! [`Tree`]: struct.Tree.html
-//! [`SearchTree`]: trait.SearchTree.html
-//! [`state_memory`]: state_memory/index.html
-//! [`GameDynamics`]: trait.GameDynamics.html
-//! [`GameDynamics::backprop_scores`]: trait.GameDynamics.html#tymethod.backprop_scores
-//! [`GameDynamics::score_leaf`]: trait.GameDynamics.html#tymethod.score_leaf
-//! [`GameDynamics::select_node`]: trait.GameDynamics.html#tymethod.select_node
-//! [`DynGD`]: trait.DynGD.html
-//!
 //! [repo_badge]: https://img.shields.io/badge/repo-github-blue.svg
 //! [repo_url]: https://github.com/trtsl/recon_mcts
 //! [mit_badge]: https://img.shields.io/badge/license-MIT-blue.svg
@@ -171,6 +162,12 @@
 // http://incompleteideas.net/book/RLbook2018.pdf
 
 #![forbid(unsafe_code)]
+#![warn(
+    rust_2018_idioms,
+    missing_debug_implementations,
+    missing_docs,
+    broken_intra_doc_links
+)]
 
 mod game_dynamics;
 mod lockref;

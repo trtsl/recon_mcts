@@ -15,9 +15,6 @@
 //! Note that this implementation is designed to be a demonstration of the API and therefore less
 //! succinct than it could be.  For example, both static and dynamic dispatch version of the game
 //! are implemented via [`GameDynamics`] and [`DynGD`], respectively.
-//!
-//! [`GameDynamics`]: ../recon_mcts/trait.GameDynamics.html
-//! [`DynGD`]: ../recon_mcts/trait.DynGD.html
 
 // A discussion of solving Nim via a DAG: https://webdocs.cs.ualberta.ca/~hayward/355/jem/nim.html
 
@@ -147,7 +144,7 @@ impl GameDynamics for Nim {
         A: Deref<Target = Self::Action>,
     {
         // you can comment the line below and it'll still run (but it runs more slowly on some
-        // machines ...  mysterious);  looking at the assembly one noticable difference was that
+        // machines ...  mysterious);  looking at the assembly one noticeable difference was that
         // including the vector resulted in use of `mov[au]pd` instructions while excluding it
         // resulted in `mov[au]ps` instructions
         let scores_and_actions = scores_and_actions.into_iter().collect::<Vec<_>>();

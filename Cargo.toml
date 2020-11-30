@@ -28,3 +28,11 @@ default-members = [
     ".",
     "./tests/*",
 ]
+
+[profile.bench]
+opt-level = 3
+lto = "fat"
+incremental = true
+debug = 2
+debug-assertions = true
+overflow-checks = true

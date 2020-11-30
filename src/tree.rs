@@ -13,8 +13,10 @@ use std::ops::{Deref, DerefMut};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, RwLock, Weak};
 
+/// Convenience type alias.
 pub type TreeAlias<GD, M> = Tree<NodeAlias<GD, M>, GD>;
 
+/// Convenience type alias.
 pub type NodeAlias<GD, M> = Node<
     GD,
     <GD as GameDynamics>::State,
@@ -299,11 +301,18 @@ impl<T> Status<T> {
 /// Contains information about a specific `Node`.
 #[derive(Debug, Clone)]
 pub struct NodeInfo<S, P, Q> {
+    /// The depth of the `Node` in the `Tree`.
     pub depth: usize,
+    /// The state of the `Node`, which is possibly `None` depending on the [`state_memory`]
+    /// configuration.
     pub state: Option<S>,
+    /// The player taking an action at this `Node`.
     pub player: P,
+    /// The score of the `Node` as evaluated by the player.
     pub score: Option<Q>,
+    /// The number of direct parent `Node`s this `Node has.
     pub n_parents: usize,
+    /// The number of direct child `Node`s this `Node has.
     pub n_children: Status<usize>,
 }
 
@@ -338,7 +347,7 @@ pub mod state_memory {
     //! <tr><td><a href="struct.StoreState.html">StoreState</a></td><td><center>&#x2713;</td><td><center></td><td><center>&#x2713;</td></tr>
     //! </table>
     //!
-    //! The mixins are used in constructing a [`Tree`] as follows:
+    //! The mixins are used in constructing a [`Tree`](crate::Tree) as follows:
     //!
     //! ```no_run
     //! # use recon_mcts::prelude::*;
@@ -357,13 +366,6 @@ pub mod state_memory {
     //! let tree = Tree::new(game, GetState, first_player, root_state);
     //! # }
     //! ```
-    //!
-    //! [`GetState`]: struct.GetState.html
-    //! [`HashOnly`]: struct.HashOnly.html
-    //! [`StoreState`]: struct.StoreState.html
-    //! [`Tree`]: ../struct.Tree.html
-    //! [`GameDynamics::State`]: ../trait.GameDynamics.html#associatedtype.State
-    //! [`GameDynamics::Player`]: ../trait.GameDynamics.html#associatedtype.Player
 
     use super::Node;
     use crate::game_dynamics::GameDynamics;
@@ -379,16 +381,19 @@ pub mod state_memory {
     // Trait Pattern:
     // https://rust-lang.github.io/api-guidelines/future-proofing.html#c-sealed
     pub trait StateMemory {
+        /// The `State` of the `Node` as specified in [`GameDynamics::State`].
         type State;
 
-        // `PartialEq` for `Node`
+        /// Specifies the implementation of `PartialEq` for a `Node` with a particular
+        /// `StateMemory` mixin.
         fn eq(&self, rhs: &Self) -> bool;
 
-        // set how the state should be stored after a child is created
+        /// Associated function to set how the `State` should be stored after a child is created.
         fn modify_state(state: &RwLock<Option<Self::State>>);
     }
 
     /// Memory usage is state dependent (could use lots of storage if states are large).
+    #[derive(Debug)]
     pub struct StoreState;
     impl<P, S, A, I, GD, Q> StateMemory for Node<GD, S, P, A, Q, I, StoreState>
     where
@@ -407,6 +412,7 @@ pub mod state_memory {
     }
 
     /// Slower performance but better memory efficiency for large states.
+    #[derive(Debug)]
     pub struct GetState;
     impl<P, S, A, I, GD, Q> StateMemory for Node<GD, S, P, A, Q, I, GetState>
     where
@@ -428,6 +434,7 @@ pub mod state_memory {
 
     /// There's a chance of hash collision, which would mean that a parent node connects to an
     /// incorrect child node.
+    #[derive(Debug)]
     pub struct HashOnly;
     impl<P, S, A, I, GD, Q> StateMemory for Node<GD, S, P, A, Q, I, HashOnly>
     where
@@ -516,7 +523,7 @@ mod branch_wip {
             prior
         }
 
-        pub fn wait(&self) -> Result<MutexGuard<bool>, PoisonError<MutexGuard<bool>>> {
+        pub fn wait(&self) -> Result<MutexGuard<'_, bool>, PoisonError<MutexGuard<'_, bool>>> {
             let lk = self.mtx.lock().unwrap();
             self.cv.wait_while(lk, |n| !*n)
         }
@@ -908,12 +915,19 @@ where
         n_updates
     }
 
+    #[allow(dead_code)]
     fn apply_atomic(
         base: &AtomicUsize,
-        f_desired: &mut impl FnMut(usize) -> usize,
         order: Ordering,
+        f_desired: &mut impl FnMut(usize) -> usize,
     ) -> usize {
         // somewhat generic idea from https://software.intel.com/en-us/node/506125
+        // same as:
+        // base.fetch_update(order, order, |x| Some(f_desired(x)))
+        //     .ok()
+        //     .expect("method should always return a `Some`");
+
+        // base.load(order)
         let mut cur = base.load(order);
         let mut desired = f_desired(cur);
         while cur != desired {
@@ -936,13 +950,14 @@ where
             .map(|(_, w)| WeakNode::upgrade(w).depth.load(Ordering::Relaxed))
             .max()?;
 
-        let new_depth = Self::apply_atomic(
-            &self.depth,
-            &mut |x| std::cmp::max(x, min_depth),
-            Ordering::Relaxed,
-        );
+        self.depth
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |x| {
+                Some(std::cmp::max(x, min_depth))
+            })
+            .ok()
+            .expect("method should always return a `Some`");
 
-        Some(new_depth)
+        Some(self.depth.load(Ordering::Relaxed))
     }
 
     fn set_min_depth(self_arc: &ArcWrap<Self>) -> usize {
@@ -1034,6 +1049,7 @@ where
         hasher.finish()
     }
 
+    /// Returns a [`NodeInfo`] with information about the `Node`.
     pub fn get_node_info(&self) -> NodeInfo<S, P, Q>
     where
         Q: Clone,
@@ -1053,13 +1069,15 @@ where
 /// A trait used to remove nodes from the transposition table that are no longer reachable from the
 /// root. Generally for internal use.
 pub trait OnDrop {
+    #[allow(missing_docs)]
     // TODO: once stabilized, turn `self_arc` to `self` using `#![feature(arbitrary_self_types)]`;
-    // besides being being semantically more reflective of the intention, it will also make using
+    // besides being semantically more reflective of the intention, it will also make using
     // `GameDynamics` as a trait object easier because `OnDrop` currently requires types that
     // implement it to be `Sized` because of the `Self` parameter in accordance with object safety
-    // rules https://doc.rust-lang.org/unstable-book/language-features/arbitrary-self-types.html
+    // rules:
+    // https://doc.rust-lang.org/unstable-book/language-features/arbitrary-self-types.html
     // https://github.com/rust-lang/rfcs/blob/master/text/0255-object-safety.md
-    fn on_drop(self_arc: ArcWrap<Self>);
+    fn on_drop(self_arc: &ArcWrap<Self>);
 }
 
 impl<GD, S, P, A, Q, I, M> OnDrop for Node<GD, S, P, A, Q, I, M>
@@ -1070,7 +1088,7 @@ where
     S: Hash + PartialEq<S> + Clone,
     P: Hash + PartialEq<P>,
 {
-    fn on_drop(self_arc: ArcWrap<Self>) {
+    fn on_drop(self_arc: &ArcWrap<Self>) {
         if let Some(ref children) = self_arc.children.read().unwrap().as_map() {
             if !children.is_empty() && self_arc.state.read().unwrap().is_none() {
                 // the orphan must have a state because it is needed when the orphan's children
@@ -1110,7 +1128,7 @@ where
                     .parents
                     .write()
                     .unwrap()
-                    .remove(&(a, ArcNode::downgrade(&self_arc)));
+                    .remove(&(a, ArcNode::downgrade(self_arc)));
 
                 debug_assert!(
                     c.state.read().unwrap().is_some() || !c.parents.read().unwrap().is_empty(),
@@ -1123,7 +1141,7 @@ where
                         could not remove dropped node as child's parents:\n\
                         \tchild {:p} parent {:p}\
                     ",
-                    &*c.inner, &*self_arc,
+                    &*c.inner, &**self_arc,
                 );
             }
         }
@@ -1133,7 +1151,7 @@ where
                 .registry
                 .write()
                 .unwrap()
-                .remove(&ArcNode::downgrade(&self_arc));
+                .remove(&ArcNode::downgrade(self_arc));
             debug_assert!(_r, "could not remove node");
         } else {
             #[cfg(debug_assertions)]
@@ -1232,7 +1250,7 @@ where
     S: Debug,
     P: Debug,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Node")
             .field("ptr", &format!("{:p}", self))
             .field("hash", &self.hash)
@@ -1246,10 +1264,14 @@ where
 }
 
 // Unlike `WeakNode` for which hash and equality comparisons are necessary, `ArcNode` is not
-// required as a newtype other for implementation of `Drop` where we rely on `Arc::strong_count`
+// required as a newtype other than for implementation of `Drop` where we rely on
+// `Arc::strong_count`
+/// Convenience type alias.
 pub type ArcNode<GD, S, P, A, Q, I, M> = ArcWrap<Node<GD, S, P, A, Q, I, M>>;
 
 #[derive(Debug, Hash, PartialEq)]
+/// Newtype to allow for a custom `Drop` implementation that also gives access to the
+/// `Arc::strong_count`.
 pub struct ArcWrap<T: ?Sized + OnDrop> {
     inner: Arc<T>,
 }
@@ -1271,8 +1293,7 @@ impl<T: ?Sized + OnDrop> Clone for ArcWrap<T> {
 impl<T: ?Sized + OnDrop> Drop for ArcWrap<T> {
     fn drop(&mut self) {
         if Arc::strong_count(&self.inner) == 1 {
-            let self_arc = ArcWrap::clone(self);
-            <T as OnDrop>::on_drop(self_arc)
+            <T as OnDrop>::on_drop(self)
         }
     }
 }
@@ -1288,9 +1309,11 @@ impl<T: ?Sized + OnDrop> Deref for ArcWrap<T> {
 // map, its hash value cannot change, in the case of a `Node` the values of `hash` and its `state`
 // may also not be changed, though a user could do so if `GameDynamics::State` has interior
 // mutability; it's the user's responsibility not to mutate the state
+/// Convenience type alias.
 pub type WeakNode<GD, S, P, A, Q, I, M> = WeakWrap<Node<GD, S, P, A, Q, I, M>>;
 
 #[derive(Debug)]
+/// Newtype wrapping a [`std::sync::Weak`] with custom `Hash` and `Eq` implementations.
 pub struct WeakWrap<T: ?Sized> {
     inner: Weak<T>,
 }
@@ -1346,8 +1369,13 @@ impl<T: ?Sized + OnDrop> Clone for WeakWrap<T> {
 #[derive(Debug)]
 /// Contains information about a `Tree`'s registry.
 pub struct RegistryInfo {
+    /// The number of times an action applied to a leaf node has resulted in a state that already
+    /// existed in the [`Tree`].
     pub hits: AtomicUsize,
+    /// The number of times an action applied to a leaf node has resulted in a state that is new in
+    /// the [`Tree`].
     pub misses: AtomicUsize,
+    /// The number of nodes in the [`Tree`].
     pub len: AtomicUsize,
 }
 
